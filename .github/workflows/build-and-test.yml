@@ -1,0 +1,44 @@
+name: Build and Test (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node.js version to test with, for example 18, 20 or 22"
+        type: string
+        required: false
+        default: "20"
+      test-command:
+        description: "Command that runs the tests, for example npm test"
+        type: string
+        required: true
+    outputs:
+      node-version:
+        description: "Exact Node.js version the tests ran on"
+        value: ${{ jobs.test.outputs.node-version }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Install and test
+    runs-on: ubuntu-latest
+    outputs:
+      node-version: ${{ steps.setup-node.outputs.node-version }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        id: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: ${{ inputs.test-command }}
