@@ -26,6 +26,18 @@ Every release gets an exact tag (`v1.2.1`). The platform team also moves a major
 ```yaml
 uses: Thormie-Harshey/ci-workflow-library/.github/workflows/build-and-test.yml@<40-character SHA> # v1.2.1
 ```
+
+### Release process
+
+```bash
+git tag -a v1.2.1 -m "Fix Docker build step"
+git tag -f v1 v1.2.1
+git push origin v1.2.1
+git push origin v1 --force
+```
+
+The exact tag (`v1.2.1`) never moves. Only the major tag (`v1`) is moved, and only to a non-breaking release.
+
 ## 2. Handling breaking changes
 
 The aim is that no team's pipeline breaks because of a change they did not choose.
