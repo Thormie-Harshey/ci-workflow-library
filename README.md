@@ -50,5 +50,42 @@ Callers using the old name see a deprecation warning but keep working. The old n
      run: echo "::warning::v1 is deprecated. Move to v2 before March 1, 2027. See the migration guide."
 ```
 
-5. **Support window.** `v1` keeps receiving backported security fixes until the end-of-support date, so no team is punished for not moving yet.
-6. **Teams migrate themselves** by changing `@v1` to `@v2` and following the guide.
+3. **Support window.** `v1` keeps receiving backported security fixes until the end-of-support date, so no team is punished for not moving yet.
+4. **Teams migrate themselves** by changing `@v1` to `@v2` and following the guide.
+
+## 3. Passing secrets securely
+
+### Explicit passing, never inherit
+
+Each reusable workflow declares exactly the secrets it accepts, and callers pass only those:
+
+| Workflow | Secret | Purpose |
+|---|---|---|
+| `build-and-test.yml` | None | |
+| `docker-build-push.yml` | `registry_password` | Log in to the image registry |
+| `deploy-to-kubernetes.yml` | `kubeconfig` | Access the target cluster |
+
+```yaml
+secrets:
+  kubeconfig: ${{ secrets.KUBECONFIG }}
+```
+
+`secrets: inherit` is not used. It hands every caller secret to shared code, so one faulty or compromised release could read any secret in all fifteen teams.
+
+### Protections inside the workflows
+
+- **Secrets are never inputs.** Inputs are written in plain text in caller files and printed in logs. The registry username is an input because it is not sensitive.
+- **Masking.** GitHub replaces secret values with `***` in logs.
+- **Environment variables, not inline expressions.** Values reach shell commands through `env:`, never `${{ }}` inside `run:`, which prevents script injection.
+- **Least-privilege permissions.** Workflows default to `contents: read`. The caller grants `packages: write` only to the build-push job.
+- **Short-lived files.** The kubeconfig is written with `chmod 600` on a temporary runner that is destroyed when the job ends.
+
+### Masking is not enough on its own
+
+Masking only hides the exact secret text. An encoded copy, or a secret sent to an outside server, is not caught. The library therefore relies on defence in depth:
+
+- The library repository uses branch protection and a `CODEOWNERS` file, so every change is reviewed by the platform team.
+- Version pinning means teams only run reviewed releases, never unreviewed commits.
+- `GITHUB_TOKEN` is created per run and expires when the job ends.
+- Production secrets are stored in a GitHub environment with required reviewers, so they unlock only after approval.
+- For cloud clusters such as EKS, OIDC is the recommended next step. The runner receives short-lived cloud access, so no long-lived kubeconfig or password is stored at all.
