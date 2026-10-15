@@ -1,0 +1,44 @@
+# Example caller. In a team's own repo this file lives at
+# .github/workflows/pipeline.yml. Kept in caller-example/ here so it
+# does not run inside the library repo.
+
+name: Orders API pipeline (caller example)
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: Thormie-Harshey/ci-workflow-library/.github/workflows/build-and-test.yml@v1
+    with:
+      node-version: "20"
+      test-command: npm test
+
+  build-push:
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: Thormie-Harshey/ci-workflow-library/.github/workflows/docker-build-push.yml@v1
+    with:
+      image-name: thormie-harshey/orders-api
+      registry: ghcr.io
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    needs: build-push
+    uses: Thormie-Harshey/ci-workflow-library/.github/workflows/deploy-to-kubernetes.yml@v1
+    with:
+      chart-path: ./chart
+      namespace: staging
+      values-file: ./chart/values-staging.yaml
+      release-name: orders-api
+      image: ${{ needs.build-push.outputs.image }}
+    secrets:
+      kubeconfig: ${{ secrets.KUBECONFIG }}
