@@ -89,3 +89,14 @@ Masking only hides the exact secret text. An encoded copy, or a secret sent to a
 - `GITHUB_TOKEN` is created per run and expires when the job ends.
 - Production secrets are stored in a GitHub environment with required reviewers, so they unlock only after approval.
 - For cloud clusters such as EKS, OIDC is the recommended next step. The runner receives short-lived cloud access, so no long-lived kubeconfig or password is stored at all.
+
+## 4. Design decisions
+
+- **Workflow location.** GitHub can only call workflows stored in `.github/workflows/`, so the three files live there. `reusable-workflows/` holds a README pointing to them. Keeping one copy of each file avoids recreating the copy-paste problem this library solves.
+- **"Runs tests on push".** A reusable workflow can only be triggered by `workflow_call`. The caller holds `on: push` and calls `build-and-test.yml` on every push.
+- **Extra inputs beyond the brief.**
+  - `registry-username`: login needs a username. It is not sensitive, so it is an input, not a secret.
+  - `release-name`: Helm needs a name for each release.
+  - `image` (optional): passes the image built by `docker-build-push.yml` into the deploy, so the image that was tested is the one deployed. It overrides the values file using `--set`.
+- **Outputs.** `build-and-test.yml` returns `node-version`, `docker-build-push.yml` returns `image` and `digest`, and `deploy-to-kubernetes.yml` returns the Helm `revision`.
+- **Pinned tools.** Helm is pinned to v3.16.4, because Helm 4 renamed the `--atomic` flag.
