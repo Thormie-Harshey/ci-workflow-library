@@ -1,0 +1,87 @@
+name: Deploy to Kubernetes with Helm (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      chart-path:
+        description: "Path to the Helm chart folder, for example ./chart"
+        type: string
+        required: true
+      namespace:
+        description: "Kubernetes namespace to deploy into, for example staging"
+        type: string
+        required: true
+      values-file:
+        description: "Path to the values file, for example ./chart/values-staging.yaml"
+        type: string
+        required: true
+      release-name:
+        description: "Name of the Helm release, for example orders-api"
+        type: string
+        required: true
+      image:
+        description: "Optional full image reference (registry/name:tag). Overrides the image in the values file"
+        type: string
+        required: false
+        default: ""
+    secrets:
+      kubeconfig:
+        description: "Contents of the kubeconfig file for the target cluster"
+        required: true
+    outputs:
+      revision:
+        description: "Helm revision number created by this deploy"
+        value: ${{ jobs.deploy.outputs.revision }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Helm upgrade
+    runs-on: ubuntu-latest
+    outputs:
+      revision: ${{ steps.status.outputs.revision }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Write kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets.kubeconfig }}
+        run: |
+          mkdir -p ~/.kube
+          printf '%s' "$KUBECONFIG_DATA" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy chart
+        env:
+          RELEASE: ${{ inputs.release-name }}
+          CHART_PATH: ${{ inputs.chart-path }}
+          NAMESPACE: ${{ inputs.namespace }}
+          VALUES_FILE: ${{ inputs.values-file }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          args=(upgrade --install "$RELEASE" "$CHART_PATH"
+                --namespace "$NAMESPACE" --create-namespace
+                -f "$VALUES_FILE"
+                --atomic --wait --timeout 5m)
+          if [ -n "$IMAGE" ]; then
+            args+=(--set "image.repository=${IMAGE%:*}" --set "image.tag=${IMAGE##*:}")
+          fi
+          helm "${args[@]}"
+
+      - name: Record revision
+        id: status
+        env:
+          RELEASE: ${{ inputs.release-name }}
+          NAMESPACE: ${{ inputs.namespace }}
+        run: |
+          rev=$(helm status "$RELEASE" -n "$NAMESPACE" -o json | jq -r '.version')
+          echo "revision=$rev" >> "$GITHUB_OUTPUT"
