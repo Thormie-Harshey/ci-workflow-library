@@ -26,3 +26,29 @@ Every release gets an exact tag (`v1.2.1`). The platform team also moves a major
 ```yaml
 uses: Thormie-Harshey/ci-workflow-library/.github/workflows/build-and-test.yml@<40-character SHA> # v1.2.1
 ```
+## 2. Handling breaking changes
+
+The aim is that no team's pipeline breaks because of a change they did not choose.
+
+### Avoid the break where possible
+
+Many changes can be made backward compatible. To rename `node-version` to `node_version`, release `v1.3.0` (MINOR) that accepts both names, uses the new one if given, and falls back to the old one:
+
+```yaml
+node-version: ${{ inputs.node_version || inputs.node-version }}
+```
+
+Callers using the old name see a deprecation warning but keep working. The old name is only removed later, in a major release.
+
+### When can a break not be avoided?
+
+1. **Release side by side.** Publish `v2.0.0` and a new `v2` tag. The `v1` tag never moves to a breaking release, so teams on `@v1` are unaffected.
+2. **Warn in v1.** Every `v1` run prints a deprecation notice with the end-of-support date:
+
+```yaml
+   - name: Deprecation notice
+     run: echo "::warning::v1 is deprecated. Move to v2 before March 1, 2027. See the migration guide."
+```
+
+5. **Support window.** `v1` keeps receiving backported security fixes until the end-of-support date, so no team is punished for not moving yet.
+6. **Teams migrate themselves** by changing `@v1` to `@v2` and following the guide.
